@@ -13,23 +13,25 @@ class HVP(BrStruct):
         self.CRC32 = 0
         self.Name = ""
         self.Entries = []
+        self.Endianness = "little"
     
-    def __br_write__(self, br: BinaryReader, *args) -> None:
-        
-        br.write_uint32(self.Signature)
+    def __br_write__(self, br: BinaryReader) -> None:
+        print(br.get_endian())
+            
+        br.write_uint32(262144)
         br.write_uint32(0)
         br.write_uint32(self.EntryCount)
-                
-        header_buffer = BinaryReader(endianness=Endian.LITTLE, encoding="cp932")
-        data_buffer = BinaryReader(endianness=Endian.LITTLE, encoding="cp932")
+        
+        header_buffer = BinaryReader(endianness=br.get_endian(), encoding="cp932")
+        data_buffer = BinaryReader(endianness=br.get_endian(), encoding="cp932")
         
         entries_size = br.size() + 4 + 24 * self.EntryCount
         
         for entry in self.Entries:
             if isinstance(entry, HVPDirectory):
                 header_buffer.write_uint32(entry.CRC32)
-                header_buffer.write_uint32(4)
-                header_buffer.write_uint64(0)
+                header_buffer.write_uint16(4)
+                header_buffer.pad(10)
                 header_buffer.write_uint32(entry.EntryCount)
                 header_buffer.write_uint32(entry.FirstEntryIndex)
             else:
@@ -98,17 +100,21 @@ def read_hvp(hvp_path):
     hvp = HVP()
 
     hvp.Signature = br.read_uint32()
-    if hvp.Signature == 327680:
+    if hvp.Signature == 1024:
         br.set_endian(Endian.BIG)
+        hvp.Endianness = "big"
 
     br.seek(4, 1)
     hvp.EntryCount = br.read_uint32()
     hvp.CRC32 = br.read_uint32()
+    
+    print(br.get_endian())
 
 
     for i in range(hvp.EntryCount):
         CRC32_code = br.read_uint32()
-        entry_type = br.read_uint32()
+        entry_type = br.read_uint16()
+        br.seek(2,1)
         
         if entry_type == 4:
             br.seek(8,1)
@@ -213,8 +219,11 @@ def repack_hvp(hvp, unpacked_hvp_folder, new_hvp_path):
                 entry.DataCRC32 = obscureCRC32(entry.Data)
                 entry.Type = 0
         
-        
-    br = BinaryReader(endianness=Endian.LITTLE, encoding="cp932")
+    
+    if hvp.Endianness == "big":
+        br = BinaryReader(endianness=Endian.BIG, encoding="cp932")
+    else:
+        br = BinaryReader(endianness=Endian.LITTLE, encoding="cp932")
     br.write_struct(hvp)
     
     with open(new_hvp_path, "wb") as f:
@@ -252,7 +261,10 @@ def repack_compress_hvp(hvp, unpacked_hvp_folder, new_hvp_path):
                     entry.Type = 1
             
             
-        br = BinaryReader(endianness=Endian.LITTLE, encoding="cp932")
+        if hvp.Endianness == "big":
+            br = BinaryReader(endianness=Endian.BIG, encoding="cp932")
+        else:
+            br = BinaryReader(endianness=Endian.LITTLE, encoding="cp932")
         br.write_struct(hvp)
         
         with open(new_hvp_path, "wb") as f:
@@ -265,7 +277,8 @@ def unpack_task(hvp_path):
     
     try:
         hvp = read_hvp(hvp_path)
-    except:
+    except Exception as e:
+        print(e)
         input(f"Error reading hvp file: {hvp_path}")
         exit(-1)
         
@@ -320,38 +333,15 @@ def tasks():
     
     elif task == 1:
         hvp_path = input("Enter the path to the hvp file: ")
-        
-        counter = perf_counter()
-        
+                
         unpack_task(hvp_path)
         
-        input(f"Unpacking time: {perf_counter() - counter}")
     else:
         hvp_folder = input("Enter the path to the hvp folder: ")
-        
-        counter = perf_counter()
-        
+                
         repack_task(hvp_folder)
-        
-        input(f"Repacking time: {perf_counter() - counter}")
-        
+                
 
-'''def main_debug():
-    hvp_path = r"E:\SteamLibrary\steamapps\common\Obscure2\datapack.hvp"
-    hvp_folder = r"E:\SteamLibrary\steamapps\common\Obscure2\datapack"
-    
-    output_folder = r"E:\SteamLibrary\steamapps\common\Obscure2\datapack_out"
-    
-    hvp = read_hvp(hvp_path)
-    make_dirs(hvp, hvp.Entries[0], output_folder)
-    
-    old_hvp = read_hvp(hvp_path)
-    
-    repack_hvp(old_hvp, hvp_folder, hvp_path)'''
-    
-    
-    
-    
 
 if __name__ == "__main__":
     

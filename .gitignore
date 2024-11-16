@@ -1,0 +1,5 @@
+
+/build
+/dist
+/HVFilePacker.dist
+*.spec
